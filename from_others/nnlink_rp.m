@@ -173,12 +173,12 @@ if dispopt
     end
 end
 
-if memory>1
-    disp('nnlink_rp:')
-    disp('Warning: "memory>1" works properly only for continuous frame numbers.')
-    disp('   Else, adjacent frames are considered even if frame numbers are')
-    disp('   not contiguous.  Try, e.g, with frames [3 4 5 11 12 13] -- ')
-    disp('   5 and 11 will be cur and nex frames, though they''re separated');
-end
+% if memory>1
+%     disp('nnlink_rp:')
+%     disp('Warning: "memory>1" works properly only for continuous frame numbers.')
+%     disp('   Else, adjacent frames are considered even if frame numbers are')
+%     disp('   not contiguous.  Try, e.g, with frames [3 4 5 11 12 13] -- ')
+%     disp('   5 and 11 will be cur and nex frames, though they''re separated');
+% end
 
 

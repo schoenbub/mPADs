@@ -53,7 +53,7 @@ function TFMmPAD_GUI_v2_OpeningFcn(hObject, eventdata, handles, varargin)
 % varargin   command line arguments to TFMmPAD_GUI_v2 (see VARARGIN)
 
 % Choose default command line output for TFMmPAD_GUI_v2
-global allpar hglob
+global allpar hglob dat
 
 handles.output = hObject;
 
@@ -62,7 +62,15 @@ guidata(hObject, handles);
 
 hglob = handles;
 
-entries={'find centers','refine positions','generate force map'};
+entries={...
+    'find centers in current slice',...
+    'find centers in stack',...
+    'track posts through stack',...
+    'refine positions by fit',...
+    'refine positions by correlation',...
+    'remove systematic drift from stack',...
+    'generate force map'...
+    };
 set(handles.processmenu,'String',entries);
 processmenu_Callback(hObject,-1,handles);
 
@@ -71,14 +79,28 @@ processmenu_Callback(hObject,-1,handles);
 allpar.f1=4;    %smoothing parameter: larger is sharper
 allpar.f2=6;    %size for disconnecting
 allpar.f3=0.5;  %fraction of area
-% parameters for refining center positions
-allpar.r1=0;    %reference for registration
-allpar.r2=100;  %upscaling factor for subpixel registration
+% parameters for stack processing (unused up to now)
+allpar.fs1=0.;
+allpar.fs2=0.;
+% parameters for connecting
+allpar.c1=2;    %connect mode: 1= no gaps, 2= allow gap of 1 frame
+allpar.c2=1;    %show progress: 1= yes, 0= no
+% parameters for refining center positions by fitting
+allpar.r1=0;    %method: 0=radial symmetry, 1=centroid
+allpar.r2=0;    %images to use: 0=selected range, 1=top-bottom
+% parameters for refining center positions by correlation
+allpar.rbc1=0;    %method
+allpar.rbc2=0;    %images to use: 0=selected range, 1=top-bottom
+% parameters for drift correction
+allpar.dc1=1;     %method [0= mean, 1=spline]
+allpar.dc2=0.3;   %fraction of posts for 2nd round of refinement
+allpar.dc3=1.0;   %color range max [std in pixel]
 % parameters for calculating force maps
 allpar.force1=0.053; %pixel size [um]
 allpar.force2=1.83;  %pillar D [um]
 allpar.force3=4.0;   %pillar L [um]
 allpar.force4=2.0;   %Young's modulus of PDMS [mPa]
+allpar.force5=0;     %method: 0=fit deflection profile, 1=top-bottom
 % processmenu entry
 allpar.process=1;
 
@@ -165,14 +187,16 @@ if pn
     set(handles.slice,'Min',1);
     set(handles.slice,'Max',num_images);
     set(handles.slice,'Value',1);
-    set(handles.slice,'SliderStep',[1 1]/num_images+1);
+    set(handles.slice,'SliderStep',[1 1]/(num_images-1));
     % reset info for bottom and top slize
     set(handles.zbottomv,'String','1');
     set(handles.ztopv,'String',num2str(num_images));
     
     dat.stack=import_tiff_stack([pn '\' dat.allfiles(1).name],[pn '\' dat.allfiles(l1+1).name]);
     
+    % update display
     plotfig(handles)
+    
 end
 
 
@@ -1031,23 +1055,25 @@ end
 
 % --- Executes on button press in processgo.
 function processgo_Callback(hObject, eventdata, handles)
-global dat allpar
+global dat allpar hglob
 % % get bottom slice of mPAD images
 % bs = round(str2num(get(handles.zbottomv,'String')));
-% get current slice of mPAD images
-bs = round(get(handles.slice,'Value'));
-im = dat.stack(:,:,bs);
-img = double(im);
 
 switch allpar.process
     
     case 1 %find initial center positions
+        %%
+        % get current slice of mPAD images
+        bs = round(get(hglob.slice,'Value'));
+        im = dat.stack(:,:,bs);
+        img = double(im);
 
         % determine approximate pitch in image
         pitch=find_pitch(img);
         display(pitch);
+        dat.pitch = pitch;
         
-        %% determine approximate center positions [pixel]
+        % determine approximate center positions [pixel]
         [x y] = find_centers_ingmar(img,pitch);
         
         % plot found centers
@@ -1059,11 +1085,221 @@ switch allpar.process
                 'Curvature', [1 1], ...
                 'Linewidth', 2.0, 'EdgeColor', [1.0 1.0 0.3]);
         end
+       
+    case 2 %find initial center positions
+        %%
+        pitch = dat.pitch;
         
-        % write into global variable
-        dat.xinit = x;
-        dat.yinit = y;
+        % follow progress
+        progtitle = sprintf('finding centers in stack...  '); 
+        progbar = waitbar(0, progtitle);  % will display progress
+               
+        % determine stack range
+        bs = round(str2double(get(hglob.zbottomv,'String')));
+        ts = round(str2double(get(hglob.ztopv,'String')));
+        
+        % finding centers for each image in stack
+        % start with first (bottom) slice
+        img = double(dat.stack(:,:,bs));
+        [x y] = find_centers_ingmar(img,pitch);
+        nrows = 8;
+        obj = zeros(nrows,length(x));
+        obj(1,:) = x;           % x coordinates
+        obj(2,:) = y;           % y coordinates
+        obj(4,:) = 1:length(x); % ID of points in frame
+        obj(5,:) = bs;          % slice number
+        waitbar(1/(ts-bs), progbar, progtitle);
+        % loop through other images in stack
+        for i=bs+1:ts
+            img = double(dat.stack(:,:,i));
+            [x y] = find_centers_ingmar(img,pitch);
+            obji = zeros(nrows,length(x));
+            obji(1,:) = x;
+            obji(2,:) = y;
+            obji(4,:) = 1:length(x);
+            obji(5,:) = i;
+            obj = [obj obji];
+            waitbar((i-bs+1)/(ts-bs), progbar, progtitle);
+        end
+        close(progbar)
+        
+        % save into global dat variable
+        dat.objinit = obj;
+        
+        % plot found centers for last slice
+        figure(7);
+        radpost=round(pitch/4.);
+        imshow(img, []); title('initial post positions')
+        for j=1:length(x)
+            rectangle('Position', [x(j)-radpost ...
+                y(j)-radpost 2*radpost 2*radpost], ...
+                'Curvature', [1 1], ...
+                'Linewidth', 2.0, 'EdgeColor', [1.0 1.0 0.3]);
+        end
+        
+    case 3 %track posts through stack
+        %%
+        % process parameters
+        memory = allpar.c1;
+        dispopt = logical(allpar.c2);
+        pitch = dat.pitch;
 
+        % get initial positions
+        objinit = dat.objinit;
+        
+        % connect
+        objinit = nnlink_rp(objinit, Inf, memory, dispopt);
+                
+        % throw out tracks that don't span all slices
+        tracks_range = unique(objinit(6,:));
+        nsl = length(unique(objinit(5,:)));
+        for k = tracks_range
+            lentrack = sum(objinit(6,:) == k);
+            if lentrack < nsl
+               cullind = find(objinit(6,:) == k);
+               objinit(6, cullind) = 0; % particles with trackid 0 are culled at end
+            end
+        end
+        % now get rid of incomplete posts
+        incomplete = find(objinit(6,:) == 0);
+        objinit(:, incomplete) = [];
+        
+        % save into global dat variable
+        dat.objinit = objinit;
+        
+        % plot found tracks
+        if dispopt
+            figure(7);
+            radpost=round(pitch/4.);
+            sl = max(objinit(5,:));
+            imshow(dat.stack(:,:,sl), []); title('tracked posts')
+            for j = unique(objinit(6,:))
+                objs_j = objinit(:,objinit(6,:)==j);  % track j
+                x = objs_j(1,:);  % x positions of this track
+                y = objs_j(2,:);  % y positions of this track
+                line(x,y,'Color','r','LineWidth',2);
+            end
+        end
+        
+    case 4 %refine positions by fitting
+        %%
+        % process parameters
+        method = allpar.r1;
+        imgs2use = allpar.r2;
+        pitch = dat.pitch;
+        
+        % load initial positions
+        objinit = dat.objinit;
+        
+        % determine slices for refinement
+        slice_range = unique(objinit(5,:));
+        if imgs2use == 1
+            slice_range = [slice_range(1) slice_range(end)];
+        end
+                
+        % loop through slices and refine positions
+        roisize = round(pitch/2.);
+        curr = slice_range(1);   % bottom slice
+        img = dat.stack(:,:,curr);
+        objs_j = objinit(:,objinit(5,:)==curr);  
+        objref = refine_by_fit(img,objs_j,roisize,method);
+        for j = 2:length(slice_range)
+            curr = slice_range(j);
+            img = dat.stack(:,:,curr);
+            objs_j = objinit(:,objinit(5,:)==curr); % selected slice
+            objs_j = refine_by_fit(img,objs_j,roisize,method);
+            objref = [objref objs_j];
+        end
+        
+        % save into global variable
+        dat.objref = objref;
+        
+        % plot refined tracks
+        figure(7);
+        radpost=floor(pitch/4.);
+        sl = slice_range(end);
+        imshow(dat.stack(:,:,sl), []); title('refined post tracks')
+        for j = unique(objref(6,:))
+            objs_j = objref(:,objref(6,:)==j);  % track j
+            x = objs_j(1,:);  % x positions of this track
+            y = objs_j(2,:);  % y positions of this track
+            line(x,y,'Color','r','LineWidth',2);
+        end
+        
+        
+    case 5 %refine positions by correlation
+        
+        %%
+        
+    case 6 %drift correction
+        %%
+        % process parameters
+        method = allpar.dc1;
+        frac4refine = allpar.dc2;
+        colormax = allpar.dc3;
+        pitch = dat.pitch;
+        
+        %% load refined positions
+        objref = dat.objref;
+        
+        %% first correct globally (all posts, by mean position)
+        trackIDs = unique(objref(6,:));
+        objrefdc = drift_correct(objref,trackIDs);
+
+        %% second round: use fraction of posts that showed little movement
+        obj_range = unique(objrefdc(6,:));
+        obj_std = obj_range.*0.;
+        for j = 1:length(obj_range)
+            objs_j = objrefdc(:,objrefdc(6,:)==obj_range(j));  % track j
+            x = objs_j(1,:);  % x positions of this track
+            y = objs_j(2,:);  % y positions of this track
+            stdx = std(x);
+            stdy = std(y);
+            stdxy = sqrt( stdx*stdx + stdy*stdy );
+            obj_std(j) = stdxy;
+        end
+        %fraction of posts with std below cutoff
+        std_cutoff = quantile(obj_std,frac4refine);
+        objID_still = obj_range(obj_std < std_cutoff);
+        %one more round of refinement
+        switch method
+            case 0 % just by mean per slice
+                objrefdc = drift_correct(objrefdc,objID_still);
+            case 1 % spline interpolation over stack
+                objrefdc = drift_correct_spline(objrefdc,objID_still);
+        end
+        
+        %% save into global variable
+        dat.objrefdc = objrefdc;
+
+        %% plot refined tracks and color-coded variance
+        figure(7);
+        radpost=floor(pitch/4.);
+        sl = max(objrefdc(5,:));
+        obj_range = unique(objrefdc(6,:));
+        obj_std = zeros([1 length(obj_range)]);
+        imshow(dat.stack(:,:,sl), []); title('drift corrected post tracks')
+        for j = obj_range;
+            objs_j = objrefdc(:,objrefdc(6,:)==j);  % track j
+            x = objs_j(1,:);  % x positions of this track
+            y = objs_j(2,:);  % y positions of this track
+            line(x,y,'Color','r','LineWidth',2);
+            stdx = std(x);
+            stdy = std(y);
+            stdxy = sqrt( stdx*stdx + stdy*stdy );
+            obj_std(j) = stdxy;
+            huevalue = 0.75*(1 - min([stdxy/colormax, 1]));
+            rectangle('Position', [x(end)-radpost ...
+                y(end)-radpost 2*radpost 2*radpost], ...
+                'Curvature', [1 1], ...
+                'Linewidth', 2.0, 'EdgeColor', hsv2rgb([huevalue 1 1]));
+        end
+        
+        figure(8)
+        xbin = 0.05:0.1:5;
+        hist(obj_std,xbin)
+        
+     
 end
 
 
@@ -1108,13 +1344,42 @@ switch allpar.process
         allpar.f1=str2double(answer(1));
         allpar.f2=str2double(answer(2));
         allpar.f3=str2double(answer(3));
-    case 2 %refine positions
-        textvar={'reference [0=bottom, 1=disk]','upscaling factor for subpixel registration'};
+    case 2 %find position in images of stack
+        textvar={'par 1 [unused]','par 2 [unused]'};
+        defans={num2str(allpar.fs1),num2str(allpar.fs2)};
+        answer=inputdlg(textvar,'Parameters for stack processing',1,defans);
+        allpar.fs1=str2double(answer(1));
+        allpar.fs2=str2double(answer(2));
+    case 3 %connect positions
+        textvar={'bridging gaps [1=no, 2=yes]','display progress [0=no, 1=yes]'};
+        defans={num2str(allpar.c1),num2str(allpar.c2)};
+        answer=inputdlg(textvar,'Parameters for connecting',1,defans);
+        allpar.c1=str2double(answer(1));
+        allpar.c2=str2double(answer(2));        
+    case 4 %refine positions by fitting
+        textvar={'method [0=radial symmetry, 1=centroid]',...
+            'images to use [0=selected, 1=top-bottom]'};
         defans={num2str(allpar.r1),num2str(allpar.r2)};
-        answer=inputdlg(textvar,'Parameters for refining post positions',1,defans);
+        answer=inputdlg(textvar,'Parameters for refining post positions by fitting',1,defans);
         allpar.r1=str2double(answer(1));
         allpar.r2=str2double(answer(2));
-    case 3 %force map
+    case 5 %refine positions by correlation between ROIs
+        textvar={'upscaling factor [10...100]',...
+            'images to use [0=selected, 1=top-bottom]'};
+        defans={num2str(allpar.rbc1),num2str(allpar.rbc2)};
+        answer=inputdlg(textvar,'Parameters for refining post positions by correlation',1,defans);
+        allpar.rbc1=str2double(answer(1));
+        allpar.rbc2=str2double(answer(2));
+    case 6 %remove drift from stack
+        textvar={'method [0= mean, 1= spline]',...
+            'fraction of posts for refinement [0...1]',...
+            'color range max [0.5...2]'};
+        defans={num2str(allpar.dc1),num2str(allpar.dc2),num2str(allpar.dc3)};
+        answer=inputdlg(textvar,'Parameters for drift correction',1,defans);
+        allpar.dc1=str2double(answer(1));
+        allpar.dc2=str2double(answer(2));
+        allpar.dc3=str2double(answer(3));
+    case 7 %calculate forces
         textvar={'pixel size [um]','pillar D [um]',...
             'pillar L [um]','Youngs modulus of PDMS [MPa]'};
         defans={num2str(allpar.force1),num2str(allpar.force2),...
