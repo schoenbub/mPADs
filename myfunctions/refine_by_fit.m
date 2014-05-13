@@ -2,6 +2,15 @@ function obj_refined=refine_by_fit(img,objs,roisize,method)
 
 % ; refine positions using the gradient method by Raghuveer Parthasarathy
 % ; see his function "fo5_rp.m"
+% ;
+% ; input:
+% ;         img: image
+% ;         obj: initial objects
+% ;         roisize: size of region of interest
+% ;         method: 0= COM, 1= radial symmetric gradient by RP
+% ; 
+% ; copyright by Ingmar Schoen, ETH Zurich, ingmar.schoen@hest.ethz.ch
+
 
 %% x,y initial center positions
 x = objs(1,:);

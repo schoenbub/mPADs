@@ -2,8 +2,14 @@ function objdc = drift_correct_spline(objref,trackIDs)
 
 % ; drift correction between slices in stack
 % ; shift of slices in stack is fitted by spline
-% ; trackIDs: gives tracks which should be used
-% ; the correction is then applied to all posts
+% ; 
+% ; inputs:
+% ;     objref: refined objects
+% ;     trackIDs: IDs of tracks which should be used
+% ; output:
+% ;     objdc: the correction is then applied to all posts
+% ; 
+% ; copyright by Ingmar Schoen, ETH Zurich, ingmar.schoen@hest.ethz.ch
 
 % slice numbers
 slice_range = unique(objref(5,:));
@@ -24,9 +30,9 @@ y1 =  obj_j_mask(2,:);
 % built up stack
 dxystack = zeros([length(slice_range) 2]);
 stdxystack = zeros([length(slice_range) 2]);
-for j = slice_range(2):slice_range(end)
+for j = 2:length(slice_range)
     % select slice j
-    obj_j = objref(:,objref(5,:)==j);
+    obj_j = objref(:,objref(5,:)==slice_range(j));
     obj_j = sort(obj_j,6);
     % indices of posts of given track IDs
     for i=1:length(indices)
@@ -50,8 +56,9 @@ end
 % use data from slice 2:end only
 % but interpolate for whole stack range
 cfit1 = slice_range(2:end);
-dxt = csaps(cfit1,dxystack(2:end,1),[],slice_range,1./stdxystack(2:end,1).^2);
-dyt = csaps(cfit1,dxystack(2:end,2),[],slice_range,1./stdxystack(2:end,2).^2);
+smoothness = 0.1; % smoothness of spline, not critical, smaller = smoother
+dxt = csaps(cfit1,dxystack(2:end,1),smoothness,slice_range,1./stdxystack(2:end,1).^2);
+dyt = csaps(cfit1,dxystack(2:end,2),smoothness,slice_range,1./stdxystack(2:end,2).^2);
 
 % show fit results
 figure(21)

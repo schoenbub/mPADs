@@ -3,6 +3,7 @@ function objdc = drift_correct(objref,trackIDs)
 % ; drift correction between slices in stack
 % ; trackIDs: gives tracks which should be used
 % ; the correction is then applied to all posts
+% ; copyright by Ingmar Schoen, ETH Zurich, ingmar.schoen@hest.ethz.ch
 
 % slice numbers
 slice_range = unique(objref(5,:));

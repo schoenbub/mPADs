@@ -92,9 +92,9 @@ allpar.r2=0;    %images to use: 0=selected range, 1=top-bottom
 allpar.rbc1=0;    %method
 allpar.rbc2=0;    %images to use: 0=selected range, 1=top-bottom
 % parameters for drift correction
-allpar.dc1=1;    %method [0= mean, 1=spline]
-allpar.dc2=0.5;    %fraction of posts for 2nd round of refinement
-allpar.dc3=1.0;    %color range max [std in pixel]
+allpar.dc1=1;     %method [0= mean, 1=spline]
+allpar.dc2=0.3;   %fraction of posts for 2nd round of refinement
+allpar.dc3=1.0;   %color range max [std in pixel]
 % parameters for calculating force maps
 allpar.force1=0.053; %pixel size [um]
 allpar.force2=1.83;  %pillar D [um]
@@ -1151,35 +1151,16 @@ switch allpar.process
         objinit = nnlink_rp(objinit, Inf, memory, dispopt);
                 
         % throw out tracks that don't span all slices
-        tracks_range = unique(objinit(6,:));
-        nsl = length(unique(objinit(5,:)));
-        for k = tracks_range
-            lentrack = sum(objinit(6,:) == k);
-            if lentrack < nsl
-               cullind = find(objinit(6,:) == k);
-               objinit(6, cullind) = 0; % particles with trackid 0 are culled at end
-            end
-        end
-        % now get rid of incomplete posts
-        incomplete = find(objinit(6,:) == 0);
-        objinit(:, incomplete) = [];
+        objinit = discard_incomplete(objinit);
         
         % save into global dat variable
         dat.objinit = objinit;
         
         % plot found tracks
         if dispopt
-            figure(7);
-            radpost=round(pitch/4.);
-            sl = max(objinit(5,:));
-            imshow(dat.stack(:,:,sl), []); title('tracked posts')
-            for j = unique(objinit(6,:))
-                objs_j = objinit(:,objinit(6,:)==j);  % track j
-                x = objs_j(1,:);  % x positions of this track
-                y = objs_j(2,:);  % y positions of this track
-                line(x,y,'Color','r','LineWidth',2);
-            end
+            show_results_tracks(objinit,7);
         end
+        
         
     case 4 %refine positions by fitting
         %%
@@ -1198,33 +1179,13 @@ switch allpar.process
         end
                 
         % loop through slices and refine positions
-        roisize = round(pitch/2.);
-        curr = slice_range(1);   % bottom slice
-        img = dat.stack(:,:,curr);
-        objs_j = objinit(:,objinit(5,:)==curr);  
-        objref = refine_by_fit(img,objs_j,roisize,method);
-        for j = 2:length(slice_range)
-            curr = slice_range(j);
-            img = dat.stack(:,:,curr);
-            objs_j = objinit(:,objinit(5,:)==curr); % selected slice
-            objs_j = refine_by_fit(img,objs_j,roisize,method);
-            objref = [objref objs_j];
-        end
+        objref = refine_stack(objinit,slice_range,method);
         
         % save into global variable
         dat.objref = objref;
         
         % plot refined tracks
-        figure(7);
-        radpost=floor(pitch/4.);
-        sl = slice_range(end);
-        imshow(dat.stack(:,:,sl), []); title('refined post tracks')
-        for j = unique(objref(6,:))
-            objs_j = objref(:,objref(6,:)==j);  % track j
-            x = objs_j(1,:);  % x positions of this track
-            y = objs_j(2,:);  % y positions of this track
-            line(x,y,'Color','r','LineWidth',2);
-        end
+        show_results_tracks(objref,7);
         
         
     case 5 %refine positions by correlation
@@ -1236,83 +1197,38 @@ switch allpar.process
         % process parameters
         method = allpar.dc1;
         frac4refine = allpar.dc2;
-        colormax = allpar.dc3;
-        pitch = dat.pitch;
-        
-        %% load refined positions
+                
+        % load refined positions
         objref = dat.objref;
         
-        %% first correct globally (all posts)
+        % first correct globally (all posts, by mean displacement)
         trackIDs = unique(objref(6,:));
-        switch method
-            case 0 % just by mean per slice
-                objrefdc = drift_correct(objref,trackIDs);
-            case 1 % spline interpolation over stack
-                objrefdc = drift_correct_spline(objref,trackIDs);
-        end
-        
-        %% second round: use fraction of posts that showed little movement
-        obj_range = unique(objrefdc(6,:));
-        obj_std = zeros([1 length(obj_range)]);
-        for j = obj_range;
-            objs_j = objrefdc(:,objrefdc(6,:)==j);  % track j
-            x = objs_j(1,:);  % x positions of this track
-            y = objs_j(2,:);  % y positions of this track
-            stdx = std(x);
-            stdy = std(y);
-            stdxy = sqrt( stdx*stdx + stdy*stdy );
-            obj_std(j) = stdxy;
-        end
-        %fraction of posts with std below cutoff
-        std_cutoff = quantile(obj_std,frac4refine)
-        still = (obj_std < std.cutoff);
-        objID_still = zeros([1 sum(still)]);
-        for j = 1:length(still)
-            if still(j)
-                objID_still = [objID_still obj_range(j)];
-            end
-        end
-        
-%         objID_still = obj_range(obj_std(:) < std_cutoff);
-%         % one more round
-%                 switch method
-%             case 0 % just by mean per slice
-%                 objrefdc = drift_correct(objrefdc,objID_still);
-%             case 1 % spline interpolation over stack
-%                 objrefdc = drift_correct_spline(objrefdc,objID_still);
-%         end
-%         
-        %% save into global variable
-        dat.objrefdc = objrefdc;
+        objrefdc = drift_correct(objref,trackIDs);
 
-        %% plot refined tracks and color-coded variance
-        figure(7);
-        radpost=floor(pitch/4.);
-        sl = max(objrefdc(5,:));
-        obj_range = unique(objrefdc(6,:));
-        obj_std = zeros([1 length(obj_range)]);
-        imshow(dat.stack(:,:,sl), []); title('drift corrected post tracks')
-        for j = obj_range;
-            objs_j = objrefdc(:,objrefdc(6,:)==j);  % track j
-            x = objs_j(1,:);  % x positions of this track
-            y = objs_j(2,:);  % y positions of this track
-            line(x,y,'Color','r','LineWidth',2);
-            stdx = std(x);
-            stdy = std(y);
-            stdxy = sqrt( stdx*stdx + stdy*stdy );
-            obj_std(j) = stdxy;
-            huevalue = 0.75*(1 - min([stdxy/colormax, 1]));
-            rectangle('Position', [x(end)-radpost ...
-                y(end)-radpost 2*radpost 2*radpost], ...
-                'Curvature', [1 1], ...
-                'Linewidth', 2.0, 'EdgeColor', hsv2rgb([huevalue 1 1]));
-        end
+        % second round: use fraction of posts that showed little movement
+        % determine fraction of posts and get their ID
+        objID_still = select_post_fraction(objrefdc,frac4refine);
+        % one more round of refinement
+        objrefdc = drift_correct_general(objrefdc,objID_still,method);
         
-        figure(8)
-        xbin = 0.05:0.1:5;
-        hist(obj_std,xbin)
+        % save into global variable
+        dat.objrefdc = objrefdc;
         
+        % display results
+        show_results_driftcorrection(objID_still,9)
      
+        
+    case 7 % force calculation
+        %%
+        % process parameters
+        pixel_size = allpar.force1;
+        post_diameter = allpar.force2;
+        post_height = allpar.force3;
+        youngs_modulus = allpar.force4;
+        
+        
+        
+        
 end
 
 
@@ -1393,8 +1309,8 @@ switch allpar.process
         allpar.dc2=str2double(answer(2));
         allpar.dc3=str2double(answer(3));
     case 7 %calculate forces
-        textvar={'pixel size [um]','pillar D [um]',...
-            'pillar L [um]','Youngs modulus of PDMS [MPa]'};
+        textvar={'pixel size [um]','post D [um]',...
+            'post L [um]','Youngs modulus of PDMS [MPa]'};
         defans={num2str(allpar.force1),num2str(allpar.force2),...
             num2str(allpar.force3),num2str(allpar.force4)};
         answer=inputdlg(textvar,'Parameters for calculation of forces',1,defans);
