@@ -54,6 +54,6 @@ end
 % convert back to pitch in original image
 % adjust for rectangular size
 ismax=max(size(imin));
-ptch=rad0*2; %.*ismax/is;
+ptch=rad0*ismax/is;
 
 end

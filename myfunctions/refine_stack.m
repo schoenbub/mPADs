@@ -4,7 +4,7 @@ function objref = refine_stack(objinit,slice_range,method)
 % ; input:
 % ;     objinit: initially found objects
 % ;     slice_range: slices to process
-% ;     method: 0= COM, 1=radial ymmetric gradient
+% ;     method: 0=radial symmetric gradient, 1= COM
 % ; output:
 % ;     refined objects
 % ; copyright by Ingmar Schoen, ETH Zurich, ingmar.schoen@hest.ethz.ch
@@ -12,6 +12,9 @@ function objref = refine_stack(objinit,slice_range,method)
 global dat
 pitch = dat.pitch;
 roisize = round(pitch/2.);
+if mod(roisize,2) == 0
+    roisize = roisize-1;
+end
 
 curr = slice_range(1);   % bottom slice
 img = dat.stack(:,:,curr);

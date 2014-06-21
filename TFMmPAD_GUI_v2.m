@@ -22,7 +22,7 @@ function varargout = TFMmPAD_GUI_v2(varargin)
 
 % Edit the above text to modify the response to help TFMmPAD_GUI_v2
 
-% Last Modified by GUIDE v2.5 06-May-2014 13:33:06
+% Last Modified by GUIDE v2.5 20-Jun-2014 14:06:26
 
 % Begin initialization code - DO NOT EDIT
 gui_Singleton = 1;
@@ -43,7 +43,7 @@ else
 end
 % End initialization code - DO NOT EDIT
 
-
+%%
 % --- Executes just before TFMmPAD_GUI_v2 is made visible.
 function TFMmPAD_GUI_v2_OpeningFcn(hObject, eventdata, handles, varargin)
 % This function has no output args, see OutputFcn.
@@ -53,6 +53,7 @@ function TFMmPAD_GUI_v2_OpeningFcn(hObject, eventdata, handles, varargin)
 % varargin   command line arguments to TFMmPAD_GUI_v2 (see VARARGIN)
 
 % Choose default command line output for TFMmPAD_GUI_v2
+
 global allpar hglob dat
 
 handles.output = hObject;
@@ -67,14 +68,34 @@ entries={...
     'find centers in stack',...
     'track posts through stack',...
     'refine positions by fit',...
-    'refine positions by correlation',...
+    'define cell outlines',...
     'remove systematic drift from stack',...
-    'generate force map'...
+    'calculate forces and directions',...
+    'output cell statistics'...
     };
 set(handles.processmenu,'String',entries);
 processmenu_Callback(hObject,-1,handles);
 
-%% default parameters for allpar
+entries={...
+    'mPAD',...
+    'image'...
+    };
+set(handles.experimentmenu,'String',entries);
+experimentmenu_Callback(hObject,-1,handles);
+
+entries={...
+    '#2',...
+    '#3 (hard)',...
+    '#5',...
+    '#7 (medium)',...
+    '#9',...
+    '#11 (soft)',...
+    '#12'...
+    };
+set(handles.mpadmenu,'String',entries);
+mpadmenu_Callback(hObject,-1,handles);
+
+% default parameters for allpar
 % parameters for finding center positions
 allpar.f1=4;    %smoothing parameter: larger is sharper
 allpar.f2=6;    %size for disconnecting
@@ -92,58 +113,54 @@ allpar.r2=0;    %images to use: 0=selected range, 1=top-bottom
 allpar.rbc1=0;    %method
 allpar.rbc2=0;    %images to use: 0=selected range, 1=top-bottom
 % parameters for drift correction
-allpar.dc1=1;     %method [0= mean, 1=spline]
-allpar.dc2=0.3;   %fraction of posts for 2nd round of refinement
+allpar.dc1=1;     %method [0= of all posts, 1= exclude cell]
+allpar.dc2=0.7;   %fraction of posts for 2nd round of refinement
 allpar.dc3=1.0;   %color range max [std in pixel]
 % parameters for calculating force maps
-allpar.force1=0.053; %pixel size [um]
-allpar.force2=1.83;  %pillar D [um]
-allpar.force3=4.0;   %pillar L [um]
-allpar.force4=2.0;   %Young's modulus of PDMS [mPa]
-allpar.force5=0;     %method: 0=spline fit, 1=exact fit, 2=top-bottom
+allpar.force1=0;     %method: 0=spline fit, 1=exact fit, 2=top-bottom
+allpar.force2=0.1;   %spline smoothness. default=0.1, smaller = smoother
+allpar.force3=5.;    %scaling factor for force arrow length
+allpar.force4=20;    %scale bar [nN]
+% parameters for determining cell masks
+allpar.cell1=0;      %method for determining cell regions: 0=freehand, 1=from force map
+% mPAD parameters
+allpar.mpadD=1.83;  %pillar D [um]
+allpar.mpadL=5.0;   %pillar L [um]
+allpar.mpadP=4.0;   %array pitch [um]
+allpar.mpadE=2.0;   %Young's modulus of PDMS [mPa]
+allpar.mpadNu=0.45;  %Poisson ratio
+% outline parameters
+allpar.outline1 = 0;    %method [0= freehand, 1=automatic]
+allpar.outline2 = 0.1;  %threshold
+allpar.outline3 = 1000;  %minimum object size [pixel]
+allpar.outline4 = 7;    %radius for closing [pixel]
+% image specifications
+allpar.pixelsize=0.090; %pixel size [um]
 % processmenu entry
 allpar.process=1;
+% experimentmenu entry
+allpar.experiment=1;
+% mpadmenu entry
+allpar.mpad=4;
 
-% UIWAIT makes TFMmPAD_GUI_v2 wait for user response (see UIRESUME)
-% uiwait(handles.figure1);
-
-
+%%
 % --- Outputs from this function are returned to the command line.
 function varargout = TFMmPAD_GUI_v2_OutputFcn(hObject, eventdata, handles) 
-% varargout  cell array for returning output args (see VARARGOUT);
-% hObject    handle to figure
-% eventdata  reserved - to be defined in a future version of MATLAB
-% handles    structure with handles and user data (see GUIDATA)
 
-% Get default command line output from handles structure
 varargout{1} = handles.output;
 
 
-
-
-
+%%
 function directory_Callback(hObject, eventdata, handles)
-% hObject    handle to directory (see GCBO)
-% eventdata  reserved - to be defined in a future version of MATLAB
-% handles    structure with handles and user data (see GUIDATA)
-
-% Hints: get(hObject,'String') returns contents of directory as text
-%        str2double(get(hObject,'String')) returns contents of directory as a double
-
 
 % --- Executes during object creation, after setting all properties.
 function directory_CreateFcn(hObject, eventdata, handles)
-% hObject    handle to directory (see GCBO)
-% eventdata  reserved - to be defined in a future version of MATLAB
-% handles    empty - handles not created until after all CreateFcns called
 
-% Hint: edit controls usually have a white background on Windows.
-%       See ISPC and COMPUTER.
 if ispc && isequal(get(hObject,'BackgroundColor'), get(0,'defaultUicontrolBackgroundColor'))
     set(hObject,'BackgroundColor','white');
 end
 
-
+%%
 % --- Executes on button press in browse.
 function browse_Callback(hObject, eventdata, handles)
 global dat
@@ -199,7 +216,7 @@ if pn
     
 end
 
-
+%%
 % --- Executes on slider movement when new file is selected.
 function chosepic_Callback(hObject, ~, handles)
 
@@ -238,10 +255,10 @@ if isequal(get(hObject,'BackgroundColor'), get(0,'defaultUicontrolBackgroundColo
     set(hObject,'BackgroundColor',[.9 .9 .9]);
 end
 
-
-
+%%
 % --- Executes on slider movement when new slice is selected.
 function slice_Callback(hObject, eventdata, handles)
+
 global dat
 dat.currentslice=round(get(hObject,'Value'));
 dat.currentchanged=1;
@@ -249,14 +266,12 @@ plotfig(handles)
 
 % --- Executes during object creation, after setting all properties.
 function slice_CreateFcn(hObject, eventdata, handles)
+
 if isequal(get(hObject,'BackgroundColor'), get(0,'defaultUicontrolBackgroundColor'))
     set(hObject,'BackgroundColor',[.9 .9 .9]);
 end
 
-
-
-
-
+%%
 % Executes when the slider in mins is moved
 function mins_Callback(hObject, eventdata, handles)
 minv=get(handles.mins,'Value');
@@ -337,73 +352,30 @@ if ispc && isequal(get(hObject,'BackgroundColor'), get(0,'defaultUicontrolBackgr
     set(hObject,'BackgroundColor','white');
 end
 
-
-
-
-% --- Executes on slider movement.
-function outmeds_Callback(hObject, eventdata, handles)
-outmedv=get(handles.outmeds,'Value');
-set(handles.outmedv,'String',num2str(outmedv));
-
-% --- Executes during object creation, after setting all properties.
-function outmeds_CreateFcn(hObject, eventdata, handles)
-% hObject    handle to outmeds (see GCBO)
-% eventdata  reserved - to be defined in a future version of MATLAB
-% handles    empty - handles not created until after all CreateFcns called
-
-% Hint: slider controls usually have a light gray background.
-if isequal(get(hObject,'BackgroundColor'), get(0,'defaultUicontrolBackgroundColor'))
-    set(hObject,'BackgroundColor',[.9 .9 .9]);
-end
-set(hObject,'Min',1);
-set(hObject,'Max',31);
-set(hObject,'Value',9);
-set(hObject,'SliderStep',[1 1]/15);
-
-% --- Executes during object creation, after setting all properties.
-function outmedv_CreateFcn(hObject, eventdata, handles)
-% hObject    handle to outmedv (see GCBO)
-% eventdata  reserved - to be defined in a future version of MATLAB
-% handles    empty - handles not created until after all CreateFcns called
-
-% Hint: edit controls usually have a white background on Windows.
-%       See ISPC and COMPUTER.
-if ispc && isequal(get(hObject,'BackgroundColor'), get(0,'defaultUicontrolBackgroundColor'))
-    set(hObject,'BackgroundColor','white');
-end
-
-function outmedv_Callback(hObject, eventdata, handles)
-% hObject    handle to outmedv (see GCBO)
-% eventdata  reserved - to be defined in a future version of MATLAB
-% handles    structure with handles and user data (see GUIDATA)
-
-% Hints: get(hObject,'String') returns contents of outmedv as text
-%        str2double(get(hObject,'String')) returns contents of outmedv as a double
-outmedv=str2double(get(handles.outmedv,'String'));
-set(handles.outmeds,'Value', outmedv);
-
-
-
 % --- Executes on button press in minp.
 function minp_Callback(hObject, eventdata, handles)
 set(handles.minv,'String','0');
 set(handles.mins,'Value', 0);
 plotfig(handles);
+
 % --- Executes on button press in maxp.
 function maxp_Callback(hObject, eventdata, handles)
 set(handles.maxv,'String','1');
 set(handles.maxs,'Value', 1);
 plotfig(handles);
+
 % --- Executes on button press in min"p.
 function min2p_Callback(hObject, eventdata, handles)
 set(handles.min2v,'String','0');
 set(handles.min2s,'Value', 0);
 plotfig(handles);
+
 % --- Executes on button press in max"p.
 function max2p_Callback(hObject, eventdata, handles)
 set(handles.max2v,'String','1');
 set(handles.max2s,'Value', 1);
 plotfig(handles);
+
 % --- Executes on button press in auto.
 function auto_Callback(hObject, eventdata, handles)
 global dat
@@ -413,6 +385,7 @@ set(handles.maxv,'String', num2str(lh(2)));
 set(handles.mins,'Value', (lh(1)));
 set(handles.maxs,'Value', (lh(2)));
 plotfig(handles)
+
 % --- Executes on button press in auto2.
 function auto2_Callback(hObject, eventdata, handles)
 global dat
@@ -423,459 +396,24 @@ set(handles.min2s,'Value', (lh(1)));
 set(handles.max2s,'Value', (lh(2)));
 plotfig(handles)
 
-
-
-% --- Executes during object creation, after setting all properties.
-function throutl_CreateFcn(hObject, eventdata, handles)
-% hObject    handle to throutl (see GCBO)
-% eventdata  reserved - to be defined in a future version of MATLAB
-% handles    empty - handles not created until after all CreateFcns called
-
-% Hint: edit controls usually have a white background on Windows.
-%       See ISPC and COMPUTER.
-if ispc && isequal(get(hObject,'BackgroundColor'), get(0,'defaultUicontrolBackgroundColor'))
-    set(hObject,'BackgroundColor','white');
-end
-set(hObject,'String','0.0');
-
-% --- Executes during object creation, after setting all properties.
-function holesize_CreateFcn(hObject, eventdata, handles)
-% hObject    handle to holesize (see GCBO)
-% eventdata  reserved - to be defined in a future version of MATLAB
-% handles    empty - handles not created until after all CreateFcns called
-
-% Hint: edit controls usually have a white background on Windows.
-%       See ISPC and COMPUTER.
-if ispc && isequal(get(hObject,'BackgroundColor'), get(0,'defaultUicontrolBackgroundColor'))
-    set(hObject,'BackgroundColor','white');
-end
-set(hObject,'String','1000');
-
-function minobjsiz_CreateFcn(hObject, eventdata, handles)
-% hObject    handle to minobjsiz (see GCBO)
-% eventdata  reserved - to be defined in a future version of MATLAB
-% handles    empty - handles not created until after all CreateFcns called
-
-% Hint: edit controls usually have a white background on Windows.
-%       See ISPC and COMPUTER.
-if ispc && isequal(get(hObject,'BackgroundColor'), get(0,'defaultUicontrolBackgroundColor'))
-    set(hObject,'BackgroundColor','white');
-end
-set(hObject,'String','5000');
-
-% --- Executes during object creation, after setting all properties.
-function wghtorig_CreateFcn(hObject, eventdata, handles)
-% hObject    handle to wghtorig (see GCBO)
-% eventdata  reserved - to be defined in a future version of MATLAB
-% handles    empty - handles not created until after all CreateFcns called
-
-% Hint: edit controls usually have a white background on Windows.
-%       See ISPC and COMPUTER.
-if ispc && isequal(get(hObject,'BackgroundColor'), get(0,'defaultUicontrolBackgroundColor'))
-    set(hObject,'BackgroundColor','white');
-end
-set(hObject,'String','5');
-
-
-% --- Executes during object creation, after setting all properties.
-function threshsmall_CreateFcn(hObject, eventdata, handles)
-% hObject    handle to threshsmall (see GCBO)
-% eventdata  reserved - to be defined in a future version of MATLAB
-% handles    empty - handles not created until after all CreateFcns called
-
-% Hint: edit controls usually have a white background on Windows.
-%       See ISPC and COMPUTER.
-if ispc && isequal(get(hObject,'BackgroundColor'), get(0,'defaultUicontrolBackgroundColor'))
-    set(hObject,'BackgroundColor','white');
-end
-set(hObject,'String','10');
-
-
-% --- Executes during object creation, after setting all properties.
-function threshlarge_CreateFcn(hObject, eventdata, handles)
-% hObject    handle to threshlarge (see GCBO)
-% eventdata  reserved - to be defined in a future version of MATLAB
-% handles    empty - handles not created until after all CreateFcns called
-
-% Hint: edit controls usually have a white background on Windows.
-%       See ISPC and COMPUTER.
-if ispc && isequal(get(hObject,'BackgroundColor'), get(0,'defaultUicontrolBackgroundColor'))
-    set(hObject,'BackgroundColor','white');
-end
-set(hObject,'String','25');
-
-
-% --- Executes during object creation, after setting all properties.
-function factorotsu_CreateFcn(hObject, eventdata, handles)
-% hObject    handle to factorotsu (see GCBO)
-% eventdata  reserved - to be defined in a future version of MATLAB
-% handles    empty - handles not created until after all CreateFcns called
-
-% Hint: edit controls usually have a white background on Windows.
-%       See ISPC and COMPUTER.
-if ispc && isequal(get(hObject,'BackgroundColor'), get(0,'defaultUicontrolBackgroundColor'))
-    set(hObject,'BackgroundColor','white');
-end
-set(hObject,'String','1.5');
-
-
-% --- Executes during object creation, after setting all properties.
-function factorotsu1_CreateFcn(hObject, eventdata, handles)
-% hObject    handle to factorotsu1 (see GCBO)
-% eventdata  reserved - to be defined in a future version of MATLAB
-% handles    empty - handles not created until after all CreateFcns called
-
-% Hint: edit controls usually have a white background on Windows.
-%       See ISPC and COMPUTER.
-if ispc && isequal(get(hObject,'BackgroundColor'), get(0,'defaultUicontrolBackgroundColor'))
-    set(hObject,'BackgroundColor','white');
-end
-set(hObject,'String','1.0');
-
-
-
-% --- Executes during object creation, after setting all properties.
-function focalsize_CreateFcn(hObject, eventdata, handles)
-% hObject    handle to focalsize (see GCBO)
-% eventdata  reserved - to be defined in a future version of MATLAB
-% handles    empty - handles not created until after all CreateFcns called
-
-% Hint: edit controls usually have a white background on Windows.
-%       See ISPC and COMPUTER.
-if ispc && isequal(get(hObject,'BackgroundColor'), get(0,'defaultUicontrolBackgroundColor'))
-    set(hObject,'BackgroundColor','white');
-end
-set(hObject,'String','5');
-
-% --- Executes during object creation, after setting all properties.
-function focalotsu_CreateFcn(hObject, eventdata, handles)
-% hObject    handle to focalotsu (see GCBO)
-% eventdata  reserved - to be defined in a future version of MATLAB
-% handles    empty - handles not created until after all CreateFcns called
-
-% Hint: edit controls usually have a white background on Windows.
-%       See ISPC and COMPUTER.
-if ispc && isequal(get(hObject,'BackgroundColor'), get(0,'defaultUicontrolBackgroundColor'))
-    set(hObject,'BackgroundColor','white');
-end
-set(hObject,'String','1.0');
-
-
-% --- Executes during object creation, after setting all properties.
-function mosnucleus_CreateFcn(hObject, eventdata, handles)
-% hObject    handle to mosnucleus (see GCBO)
-% eventdata  reserved - to be defined in a future version of MATLAB
-% handles    empty - handles not created until after all CreateFcns called
-
-% Hint: edit controls usually have a white background on Windows.
-%       See ISPC and COMPUTER.
-if ispc && isequal(get(hObject,'BackgroundColor'), get(0,'defaultUicontrolBackgroundColor'))
-    set(hObject,'BackgroundColor','white');
-end
-set(hObject,'String','400');
-
-
-% --- Executes during object creation, after setting all properties.
-function sesize_CreateFcn(hObject, eventdata, handles)
-% hObject    handle to sesize (see GCBO)
-% eventdata  reserved - to be defined in a future version of MATLAB
-% handles    empty - handles not created until after all CreateFcns called
-
-% Hint: edit controls usually have a white background on Windows.
-%       See ISPC and COMPUTER.
-if ispc && isequal(get(hObject,'BackgroundColor'), get(0,'defaultUicontrolBackgroundColor'))
-    set(hObject,'BackgroundColor','white');
-end
-set(hObject,'String','7');
-
-
-% --- Executes during object creation, after setting all properties.
-function thrfac_CreateFcn(hObject, eventdata, handles)
-% hObject    handle to thrfac (see GCBO)
-% eventdata  reserved - to be defined in a future version of MATLAB
-% handles    empty - handles not created until after all CreateFcns called
-
-% Hint: edit controls usually have a white background on Windows.
-%       See ISPC and COMPUTER.
-if ispc && isequal(get(hObject,'BackgroundColor'), get(0,'defaultUicontrolBackgroundColor'))
-    set(hObject,'BackgroundColor','white');
-end
-set(hObject,'String','0.2');
-
-
-
 % --- Executes during object creation, after setting all properties.
 function idActin_CreateFcn(hObject, eventdata, handles)
-% hObject    handle to idActin (see GCBO)
-% eventdata  reserved - to be defined in a future version of MATLAB
-% handles    empty - handles not created until after all CreateFcns called
 
-% Hint: edit controls usually have a white background on Windows.
-%       See ISPC and COMPUTER.
 if ispc && isequal(get(hObject,'BackgroundColor'), get(0,'defaultUicontrolBackgroundColor'))
     set(hObject,'BackgroundColor','white');
 end
 set(hObject,'String','w1SPI 491');
 
-% --- Executes during object creation, after setting all properties.
-function idActinFib_CreateFcn(hObject, eventdata, handles)
-% hObject    handle to idActinFib (see GCBO)
-% eventdata  reserved - to be defined in a future version of MATLAB
-% handles    empty - handles not created until after all CreateFcns called
-
-% Hint: edit controls usually have a white background on Windows.
-%       See ISPC and COMPUTER.
-if ispc && isequal(get(hObject,'BackgroundColor'), get(0,'defaultUicontrolBackgroundColor'))
-    set(hObject,'BackgroundColor','white');
-end
-set(hObject,'String','FITC');
-
+%%
 % --- Executes during object creation, after setting all properties.
 function idmPAD_CreateFcn(hObject, eventdata, handles)
-% hObject    handle to idmPAD (see GCBO)
-% eventdata  reserved - to be defined in a future version of MATLAB
-% handles    empty - handles not created until after all CreateFcns called
 
-% Hint: edit controls usually have a white background on Windows.
-%       See ISPC and COMPUTER.
 if ispc && isequal(get(hObject,'BackgroundColor'), get(0,'defaultUicontrolBackgroundColor'))
     set(hObject,'BackgroundColor','white');
 end
 set(hObject,'String','w2SPI 561');
 
-
-% --- Executes on button press in outlines.
-function outlines_Callback(hObject, eventdata, handles)
-% hObject    handle to outlines (see GCBO)
-% eventdata  reserved - to be defined in a future version of MATLAB
-% handles    structure with handles and user data (see GUIDATA)
-
-global dat
-
-p=get(handles.directory,'String');
-fn=dat.allfiles(dat.current).name;
-
-im=double(dat.raw);
-im=im/max(im(:));
-
-[bwout overout] = outlines_func(im, handles);
-
-figure(3)
-imagesc(overout)
-colormap gray
-
-[p,f,ext]=fileparts([p '\' fn]);
-[f p]=uiputfile([p '\' f '_Outline.png']);
-if f
-   imwrite(bwout,[p '\' f])
-end
-
-function [bwout overout] = outlines_func(im, handles)
-% hObject    handle to outlines (see GCBO)
-% eventdata  reserved - to be defined in a future version of MATLAB
-% handles    structure with handles and user data (see GUIDATA)
-
-imdiff=im*0;
-for sig1=[5 7 11 15 19 25 33 41 49] % subtract images with different degrees of blurring
-    hg = fspecial('gaussian', 5*sig1+1, sig1);
-    imdiff=imdiff+(im-imfilter(im,hg,'replicate'));
-end;
-wo = str2double(get(handles.wghtorig,'String'));
-imdiff=imdiff+wo*(im-mean(im(:))); % remove dim background in dark regions
-imdiff=imdiff/(max(imdiff(:)));
-
-fon = str2double(get(handles.throutl,'String'));
-level = fon*graythresh(imdiff); %choose threshold not exactly at 0. but a little higher to get rid of connected background pixels
-bw0 = im2bw(imdiff, level); %create binary
-
-
-% attempt to work with rank filters to close gaps in outline
-% se = fspecial('disk',9);
-% se(se>0) = 1;
-% perc = floor(0.9*sum(se(:)));
-% imrank = ordfilt2(imdiff,perc,se,'ones');
-% se = fspecial('disk',10);
-% se(se>0) = 1;
-% perc = max(floor(0.1*sum(se(:))),1);
-% imrank = ordfilt2(imrank,perc,se,'ones');
-% bwrank = im2bw(imrank, 0); %create binary
-% bw1 = imfill(bwrank,'holes'); % fill holes
-% % some holes where empty spaces between cells; try to get them back again
-% mhs = round(str2double(get(handles.holesize,'String')));
-% bwholes = bw1-bwrank;
-% bwholes = bwareaopen(bwholes,mhs);
-% bwrank = bw1-bwholes;
-
-se = strel('disk',5);
-bw1 = imopen(bw0,se); % remove thin connected objects
-mos = round(str2double(get(handles.minobjsiz,'String')));
-bw1 = bwareaopen(bw1,mos); % remove small remaining objects, only centers of cells should remain
-bw0 = imreconstruct(bw1,bw0,4); % reconstruct objects based on remaining centers
-
-bw1 = imfill(bw0,'holes'); % fill holes
-% some holes where empty spaces between cells; try to get them back again
-mhs = round(str2double(get(handles.holesize,'String')));
-bwholes = bw1-bw0;
-bwholes = bwareaopen(bwholes,mhs);
-bw1 = bw1-bwholes;
-
-% marker = imerode(bw1,se);
-% bwout = imreconstruct(marker,bwrank);
-
-% figure(2)
-% imagesc([bw1 bwrank bwout])
-% colormap gray
-
-% 
-bw1 = bwmorph(bw1,'clean'); % remove single pixels
-dim = round(get(handles.outmeds,'Value'))
-bw1 = medfilt2(bw1,[dim dim]); % median filter to smoothen outline without displacing it
-mos = round(str2double(get(handles.minobjsiz,'String')));
-bw1 = bwareaopen(bw1,mos);
-% 
-bw2 = bwperim(bw1,4);
-overim = max(bw2,im);
-
-bwout = bw1;
-overout = overim;
-
-
-% --- Executes on button press in fibers.
-function fibers_Callback(hObject, eventdata, handles)
-% hObject    handle to fibers (see GCBO)
-% eventdata  reserved - to be defined in a future version of MATLAB
-% handles    structure with handles and user data (see GUIDATA)
-
-global dat
-
-p=get(handles.directory,'String');
-fn=dat.allfiles(dat.current).name;
-
-im=double(dat.raw);
-im=im/max(im(:));
-
-[bw, angle] = fibers_func(im, handles);
-
-figure(3)
-imagesc(angle.*bw)
-colormap hsv
-
-figure(4)
-imagesc(bw)
-colormap gray
-
-angleim = exp(2*i*angle).*bw; % 'squared' orientational image: complex representation
-
-% % orientational averaging
-% h = fspecial('disk', 15);
-% angleimav = imfilter(angleim,h,'replicate');
-% % angleimav = imresize(angleimav,1/16);
-% maskav = imfilter(bw,h,'replicate');
-% % maskav = imresize(maskav,1/16);
-% maskav(maskav == 0) = 1.;
-% angleav = atan2(imag(angleimav),real(angleimav))/2.;
-% orderav = abs(angleimav)./maskav;
-% figure(4)
-% imagesc(orderav,[0. 1.])
-% colormap gray
-% figure(3)
-% imagesc(angleav)
-% colormap hsv
-
-% calculate 2D orientational autocorrelation... pixels that are zero don't
-% contribute
-[m n] = size(angleim);
-border = round(min([m n])*0.3);
-% padd on all sides with zeros to prevent artefacts from cyclic FFT
-angleimpad = padarray(angleim,border); 
-fftang = fft2(angleimpad);
-% this essentially gives cos(2*theta) with theta the difference of orientations between 2 pixels
-oriautocorr = real(ifft2(fftang.*conj(fftang)));
-% center zero distance at image center [mm/2 nn/2] and normalize for radial averaging
-[mm nn] = size(oriautocorr);
-oriautocorr = circshift(oriautocorr,[mm/2-1 nn/2-1]);
-oriautocorr = oriautocorr/max(oriautocorr(:));
-% figure(3)
-% imagesc(oriautocorr)
-% colormap hsv
-
-% take radial average
-radav = zeros(1,mm*nn+1);
-radnumb = radav;
-for k=1:mm
-    for l=1:nn
-        dd = round(sqrt((k-mm/2)^2+(l-nn/2)^2));
-        radav(dd+1) = radav(dd+1)+oriautocorr(k,l);
-        radnumb(dd+1) = radnumb(dd+1)+1;
-    end
-end
-radav = radav./radnumb;
-figure(5)
-semilogx(radav(2:border))
-
-% save as text file
-data2write = [(1:border)-1; radav(1:border)];
-p=get(handles.directory,'String');
-fn=dat.allfiles(dat.current).name;
-[p,f,ext]=fileparts([p '\' fn]);
-[f p]=uiputfile([p '\' f '_OrderDecay.txt']);
-if f
-    fid = fopen([p '\' f], 'w');
-    fprintf(fid, '%u\t%6.6f\n',data2write);
-    fclose(fid);
-end
-
-p=get(handles.directory,'String');
-fn=dat.allfiles(dat.current).name;
-[p,f,ext]=fileparts([p '\' fn]);
-[f p]=uiputfile([p '\' f '_Filaments.png']);
-if f
-   imwrite(bw,[p '\' f])
-end
-
-p=get(handles.directory,'String');
-fn=dat.allfiles(dat.current).name;
-[p,f,ext]=fileparts([p '\' fn]);
-[f p]=uiputfile([p '\' f '_Angles.png']);
-if f
-   anglew=uint16(((angle/pi)+0.5)*65535);
-   imwrite(anglew,[p '\' f],'bitdepth',16)
-end
-
-function idActin_Callback(hObject, eventdata, handles)
-% hObject    handle to idActin (see GCBO)
-% eventdata  reserved - to be defined in a future version of MATLAB
-% handles    structure with handles and user data (see GUIDATA)
-
-% Hints: get(hObject,'String') returns contents of idActin as text
-%        str2double(get(hObject,'String')) returns contents of idActin as a double
-
-
 function idmPAD_Callback(hObject, eventdata, handles)
-% hObject    handle to idmPAD (see GCBO)
-% eventdata  reserved - to be defined in a future version of MATLAB
-% handles    structure with handles and user data (see GUIDATA)
-
-% Hints: get(hObject,'String') returns contents of idmPAD as text
-%        str2double(get(hObject,'String')) returns contents of idmPAD as a double
-
-
-function wghtorig_Callback(hObject, eventdata, handles)
-% hObject    handle to wghtorig (see GCBO)
-% eventdata  reserved - to be defined in a future version of MATLAB
-% handles    structure with handles and user data (see GUIDATA)
-
-% Hints: get(hObject,'String') returns contents of wghtorig as text
-%        str2double(get(hObject,'String')) returns contents of wghtorig as a double
-
-
-function throutl_Callback(hObject, eventdata, handles)
-% hObject    handle to throutl (see GCBO)
-% eventdata  reserved - to be defined in a future version of MATLAB
-% handles    structure with handles and user data (see GUIDATA)
-
-% Hints: get(hObject,'String') returns contents of throutl as text
-%        str2double(get(hObject,'String')) returns contents of throutl as a double
 
 
 % --- Executes on button press in zbottomp.
@@ -883,187 +421,95 @@ function zbottomp_Callback(hObject, eventdata, handles)
 bz=num2str(get(handles.slice,'Value'));
 set(handles.zbottomv,'String',bz);
 
-
 % --- Executes on button press in ztopp.
 function ztopp_Callback(hObject, eventdata, handles)
 tz=num2str(get(handles.slice,'Value'));
 set(handles.ztopv,'String',tz);
 
-
+%%
 function min2v_Callback(hObject, eventdata, handles)
-% hObject    handle to min2v (see GCBO)
-% eventdata  reserved - to be defined in a future version of MATLAB
-% handles    structure with handles and user data (see GUIDATA)
-
-% Hints: get(hObject,'String') returns contents of min2v as text
-%        str2double(get(hObject,'String')) returns contents of min2v as a double
-
 
 % --- Executes during object creation, after setting all properties.
 function min2v_CreateFcn(hObject, eventdata, handles)
-% hObject    handle to min2v (see GCBO)
-% eventdata  reserved - to be defined in a future version of MATLAB
-% handles    empty - handles not created until after all CreateFcns called
 
-% Hint: edit controls usually have a white background on Windows.
-%       See ISPC and COMPUTER.
 if ispc && isequal(get(hObject,'BackgroundColor'), get(0,'defaultUicontrolBackgroundColor'))
     set(hObject,'BackgroundColor','white');
 end
 
-
-
 function max2v_Callback(hObject, eventdata, handles)
-% hObject    handle to max2v (see GCBO)
-% eventdata  reserved - to be defined in a future version of MATLAB
-% handles    structure with handles and user data (see GUIDATA)
-
-% Hints: get(hObject,'String') returns contents of max2v as text
-%        str2double(get(hObject,'String')) returns contents of max2v as a double
-
 
 % --- Executes during object creation, after setting all properties.
 function max2v_CreateFcn(hObject, eventdata, handles)
-% hObject    handle to max2v (see GCBO)
-% eventdata  reserved - to be defined in a future version of MATLAB
-% handles    empty - handles not created until after all CreateFcns called
 
-% Hint: edit controls usually have a white background on Windows.
-%       See ISPC and COMPUTER.
 if ispc && isequal(get(hObject,'BackgroundColor'), get(0,'defaultUicontrolBackgroundColor'))
     set(hObject,'BackgroundColor','white');
 end
 
-
-
+%%
 function zbottomv_Callback(hObject, eventdata, handles)
-% hObject    handle to zbottomv (see GCBO)
-% eventdata  reserved - to be defined in a future version of MATLAB
-% handles    structure with handles and user data (see GUIDATA)
-
-% Hints: get(hObject,'String') returns contents of zbottomv as text
-%        str2double(get(hObject,'String')) returns contents of zbottomv as a double
-
 
 % --- Executes during object creation, after setting all properties.
 function zbottomv_CreateFcn(hObject, eventdata, handles)
-% hObject    handle to zbottomv (see GCBO)
-% eventdata  reserved - to be defined in a future version of MATLAB
-% handles    empty - handles not created until after all CreateFcns called
 
-% Hint: edit controls usually have a white background on Windows.
-%       See ISPC and COMPUTER.
 if ispc && isequal(get(hObject,'BackgroundColor'), get(0,'defaultUicontrolBackgroundColor'))
     set(hObject,'BackgroundColor','white');
 end
 
-
-
+%%
 function ztopv_Callback(hObject, eventdata, handles)
-% hObject    handle to ztopv (see GCBO)
-% eventdata  reserved - to be defined in a future version of MATLAB
-% handles    structure with handles and user data (see GUIDATA)
-
-% Hints: get(hObject,'String') returns contents of ztopv as text
-%        str2double(get(hObject,'String')) returns contents of ztopv as a double
-
 
 % --- Executes during object creation, after setting all properties.
 function ztopv_CreateFcn(hObject, eventdata, handles)
-% hObject    handle to ztopv (see GCBO)
-% eventdata  reserved - to be defined in a future version of MATLAB
-% handles    empty - handles not created until after all CreateFcns called
 
-% Hint: edit controls usually have a white background on Windows.
-%       See ISPC and COMPUTER.
 if ispc && isequal(get(hObject,'BackgroundColor'), get(0,'defaultUicontrolBackgroundColor'))
     set(hObject,'BackgroundColor','white');
 end
 
-
+%%
 % --- Executes during object creation, after setting all properties.
 function image1_CreateFcn(hObject, eventdata, handles)
-% hObject    handle to image1 (see GCBO)
-% eventdata  reserved - to be defined in a future version of MATLAB
-% handles    empty - handles not created until after all CreateFcns called
-
-% Hint: place code in OpeningFcn to populate image1
-
 
 % --- Executes during object creation, after setting all properties.
 function image2_CreateFcn(hObject, eventdata, handles)
-% hObject    handle to image2 (see GCBO)
-% eventdata  reserved - to be defined in a future version of MATLAB
-% handles    empty - handles not created until after all CreateFcns called
-
-% Hint: place code in OpeningFcn to populate image2
-
 
 % --- Executes during object creation, after setting all properties.
 function figure1_CreateFcn(hObject, eventdata, handles)
-% hObject    handle to figure1 (see GCBO)
-% eventdata  reserved - to be defined in a future version of MATLAB
-% handles    empty - handles not created until after all CreateFcns called
-
 
 % --- Executes during object deletion, before destroying properties.
 function figure1_DeleteFcn(hObject, eventdata, handles)
-% hObject    handle to figure1 (see GCBO)
-% eventdata  reserved - to be defined in a future version of MATLAB
-% handles    structure with handles and user data (see GUIDATA)
 
-
+%%
 % --- Executes during object creation, after setting all properties.
 function filename_CreateFcn(hObject, eventdata, handles)
+
 if ispc && isequal(get(hObject,'BackgroundColor'), get(0,'defaultUicontrolBackgroundColor'))
     set(hObject,'BackgroundColor','white');
 end
-
-
 
 function filename_Callback(hObject, eventdata, handles)
-% hObject    handle to filename (see GCBO)
-% eventdata  reserved - to be defined in a future version of MATLAB
-% handles    structure with handles and user data (see GUIDATA)
 
-% Hints: get(hObject,'String') returns contents of filename as text
-%        str2double(get(hObject,'String')) returns contents of filename as a double
-
-
-
-function filename2_Callback(hObject, eventdata, handles)
-% hObject    handle to filename2 (see GCBO)
-% eventdata  reserved - to be defined in a future version of MATLAB
-% handles    structure with handles and user data (see GUIDATA)
-
-% Hints: get(hObject,'String') returns contents of filename2 as text
-%        str2double(get(hObject,'String')) returns contents of filename2 as a double
-
-
+%%
 % --- Executes during object creation, after setting all properties.
 function filename2_CreateFcn(hObject, eventdata, handles)
-% hObject    handle to filename2 (see GCBO)
-% eventdata  reserved - to be defined in a future version of MATLAB
-% handles    empty - handles not created until after all CreateFcns called
 
-% Hint: edit controls usually have a white background on Windows.
-%       See ISPC and COMPUTER.
 if ispc && isequal(get(hObject,'BackgroundColor'), get(0,'defaultUicontrolBackgroundColor'))
     set(hObject,'BackgroundColor','white');
 end
 
+function filename2_Callback(hObject, eventdata, handles)
 
+%%
 % --- Executes on button press in processgo.
 function processgo_Callback(hObject, eventdata, handles)
 global dat allpar hglob
-% % get bottom slice of mPAD images
+% % get bottom slice of experimentmenu images
 % bs = round(str2num(get(handles.zbottomv,'String')));
 
 switch allpar.process
     
     case 1 %find initial center positions
         %%
-        % get current slice of mPAD images
+        % get current slice of experimentmenu images
         bs = round(get(hglob.slice,'Value'));
         im = dat.stack(:,:,bs);
         img = double(im);
@@ -1086,7 +532,7 @@ switch allpar.process
                 'Linewidth', 2.0, 'EdgeColor', [1.0 1.0 0.3]);
         end
        
-    case 2 %find initial center positions
+    case 2 %find center positions throughout stack
         %%
         pitch = dat.pitch;
         
@@ -1142,8 +588,7 @@ switch allpar.process
         % process parameters
         memory = allpar.c1;
         dispopt = logical(allpar.c2);
-        pitch = dat.pitch;
-
+        
         % get initial positions
         objinit = dat.objinit;
         
@@ -1167,8 +612,7 @@ switch allpar.process
         % process parameters
         method = allpar.r1;
         imgs2use = allpar.r2;
-        pitch = dat.pitch;
-        
+               
         % load initial positions
         objinit = dat.objinit;
         
@@ -1188,31 +632,122 @@ switch allpar.process
         show_results_tracks(objref,7);
         
         
-    case 5 %refine positions by correlation
-        
+%     case 5 %refine positions by correlation
+%         
+%         %%to be implemented; 
+%         % based on correlation between ROIs around posts (pairwise for all)
+%         % the fit spline
+%         % does not require symmetric intensity distribution
+%         % averages out erroroneous stainings
+
+
+      case 5 % determine outline of cells
         %%
         
+        % import current image of second channel
+        imnum = round(size(dat.stack,3)/2+dat.currentslice);
+        im = double(dat.stack(:,:,imnum));
+        % grayscale parameters       
+        thr = allpar.outline2;
+        im = (im-min(im(:)))/(thr*(max(im(:))-min(im(:))));
+        im(im>1) = 1;
+        figure(1)
+        imshow(im, []);
+        colormap gray
+        
+        % determine outline
+        meth = allpar.outline1;
+        switch meth
+            case 0 % freehand drawing of cell outlines
+                L = outlines_freehand();
+            case 1 % from actin image
+                L = outlines_actin(im);
+        end
+        % save into global variable
+        dat.labelmask = L;
+                
     case 6 %drift correction
         %%
         % process parameters
-        method = allpar.dc1;
+        method = 1;
+        outl = allpar.dc1;
         frac4refine = allpar.dc2;
                 
         % load refined positions
         objref = dat.objref;
-        
+
+        % map posts (IDs) onto hexagonal grid
+        hexa_lattice = map_onto_hexa(objref);
+        % save into global variable
+        dat.hexaIDs = hexa_lattice;
+        % save positions in hexagonal map
+        [hx hy] = map_pos_hexa(objref,hexa_lattice);
+        dat.hexaposx = hx;
+        dat.hexaposy = hy;
+
+
         % first correct globally (all posts, by mean displacement)
         trackIDs = unique(objref(6,:));
         objrefdc = drift_correct(objref,trackIDs);
 
+        % map of post variances
+        var_lattice = map_var_hexa(objrefdc,hexa_lattice);
+        % show variance map
+        figure(56)
+        subplot(2,3,1)
+        imshow(var_lattice',[0 2])
+        colormap jet
+        % median filtering
+        filtered_hexa = filt_med_hexa(hexa_lattice,var_lattice);
+        % show filtered
+        subplot(2,3,2)
+        imshow(filtered_hexa',[0 2])
+        colormap jet
+
         % second round: use fraction of posts that showed little movement
         % determine fraction of posts and get their ID
-        objID_still = select_post_fraction(objrefdc,frac4refine);
-        % one more round of refinement
+        
+        if outl ==1
+            % sort out the posts within the cell outlines
+            L = dat.labelmask;
+            xyposts = round([hx(~isnan(hexa_lattice)), hy(~isnan(hexa_lattice))]);
+            IDposts = hexa_lattice(~isnan(hexa_lattice));
+            for k=fliplr(1:length(xyposts))
+                if L(xyposts(k,2),xyposts(k,1))>0
+                    IDposts(k) = [];
+                end
+            end
+            objID_still = squeeze(IDposts); 
+            % ...the same on the hexagonal lattice
+            hexa4refine = NaN(size(hexa_lattice));
+            for j=1:length(objID_still)
+                hexa4refine(hexa_lattice == objID_still(j)) = objID_still(j);
+            end
+            
+        else
+            hexa4refine = hexa_lattice;
+        end
+        % determine posts that shall be used for 2nd round
+        objID_still = select_post_fraction(hexa4refine,filtered_hexa,...
+            frac4refine);
+        % show this fraction
+        hexa_still = uint8(sign(hexa_lattice)*10);
+        for j=1:length(objID_still)
+            id_j = objID_still(j);
+            hexa_still(hexa_lattice == id_j) = 2;
+        end
+        subplot(2,3,3)
+        imshow(hexa_still',[0 10])
+        colormap jet
+
+        % 2nd refinement
         objrefdc = drift_correct_general(objrefdc,objID_still,method);
         
         % save into global variable
         dat.objrefdc = objrefdc;
+        % save variance hexagonal map
+        var_lattice = map_var_hexa(objrefdc,hexa_lattice);
+        dat.hexavar = var_lattice;
         
         % display results
         show_results_driftcorrection(objID_still,9)
@@ -1220,48 +755,192 @@ switch allpar.process
         
     case 7 % force calculation
         %%
-        % process parameters
-        pixel_size = allpar.force1;
-        post_diameter = allpar.force2;
-        post_height = allpar.force3;
-        youngs_modulus = allpar.force4;
-        method_force = allpar.force5;
         
+        % load refined and drift-corrected objects
+        objrefdc = dat.objrefdc;
         
+        % calculate forces
+        defl_ang_force = calc_forces(objrefdc);
         
+        % save deflection, angle, and force into hexagonal maps
+        hexa_lattice = dat.hexaIDs;
+        [hexad hexaa hexaf] = map_results_hexa(defl_ang_force,hexa_lattice);
+        dat.hexadefl = hexad;
+        dat.hexaang = hexaa;
+        dat.hexaforce = hexaf;
+        
+        % show results of force calculation
+        show_results_forcecalculation(defl_ang_force,objrefdc,10);
+        
+    case 8 % generate and save statistics for each cell
+        %%
+        % get labelmatrix of cell outlines
+        L = dat.labelmask;
+        % get pixel size
+        pixsiz = allpar.pixelsize;
+        
+        % calculate cell statistics from image
+        cellstats = regionprops(L,'Area','Centroid','BoundingBox',...
+            'Circularity','MajorAxisLength','MinorAxisLength');
+        % area in µm^2
+        cellarea = [cellstats.Area]*pixsiz*pixsiz;
+        % ellipticity
+        cellellipticity = [cellstats.MajorAxisLength]./[cellstats.MinorAxisLength];
+        % centroid in pixel
+        cellcentroid = [cellstats.Centroid];
+        % cell circularity
+        cellcirc = [cellstats.Circularity];
+        
+        % force statistics
+        % load post data
+        hx = dat.hexaposx;
+        hy = dat.hexaposy;
+        hID = dat.hexaIDs;
+        ha = dat.hexaang;
+        hd = dat.hexadefl;
+        hf = dat.hexaforce;
+        % convert into linear lists
+        xyposts = round([hx(~isnan(hID)), hy(~isnan(hID))]);
+        IDposts = hID(~isnan(hID));
+        angposts = ha(~isnan(hID));
+        deflposts = hd(~isnan(hID));
+        forceposts = hf(~isnan(hID));
+        % linear list for region label (that contains this post)
+        labelposts = 0*IDposts;
+        for k=1:length(xyposts)
+            labelposts(k) = L(xyposts(k,2),xyposts(k,1));
+        end
+        % force statistics over individual cells
+        cellavgforce = cellcirc * 0.;
+        cellmaxforce = cellavgforce;
+        cellresidualx = cellavgforce;
+        cellresidualy = cellavgforce;
+        cellchecksum = cellavgforce;
+        for i=1:max(L(:))
+            % force of posts under cell
+            fi = forceposts(labelposts == i);
+            % average force
+            cellavgforce(i) = mean(fi);
+            % maximum force
+            cellmaxforce(i) = max(fi);
+            % angles of forces
+            fa = angposts(labelposts == i);
+            % vectorial sum of forces (=internal check)
+            cellresidualx(i) = cos(fa).*fi;
+            cellresidualy(i) = sin(fa).*fi;
+            cellchecksum(i) = sqrt(cellresidualx(i).^2 + cellresidualy(i).^2);
+        end
+            
+        
+
 end
 
-
+%%
 % --- Executes on selection change in processmenu.
 function processmenu_Callback(hObject, eventdata, handles)
-% hObject    handle to processmenu (see GCBO)
-% eventdata  reserved - to be defined in a future version of MATLAB
-% handles    structure with handles and user data (see GUIDATA)
+
 global allpar
 allpar.process=get(handles.processmenu,'Value');
-display(allpar.process);
-
 
 % --- Executes during object creation, after setting all properties.
 function processmenu_CreateFcn(hObject, eventdata, handles)
-% hObject    handle to processmenu (see GCBO)
-% eventdata  reserved - to be defined in a future version of MATLAB
-% handles    empty - handles not created until after all CreateFcns called
 
-% Hint: popupmenu controls usually have a white background on Windows.
-%       See ISPC and COMPUTER.
 if ispc && isequal(get(hObject,'BackgroundColor'), get(0,'defaultUicontrolBackgroundColor'))
     set(hObject,'BackgroundColor','white');
 end
 
+%%
+% --- Executes during object creation, after setting all properties.
+function experimentmenu_CreateFcn(hObject, eventdata, handles)
 
-% --- Executes on button press in parprocess.
-function parprocess_Callback(hObject, eventdata, handles)
-% hObject    handle to parprocess (see GCBO)
+if ispc && isequal(get(hObject,'BackgroundColor'), get(0,'defaultUicontrolBackgroundColor'))
+    set(hObject,'BackgroundColor','white');
+end
+
+% --- Executes on selection change in experimentmenu.
+function experimentmenu_Callback(hObject, eventdata, handles)
+
+global allpar
+allpar.experiment=get(handles.experimentmenu,'Value');
+
+%%
+% --- Executes during object creation, after setting all properties.
+function mpadmenu_CreateFcn(hObject, eventdata, handles)
+
+if ispc && isequal(get(hObject,'BackgroundColor'), get(0,'defaultUicontrolBackgroundColor'))
+    set(hObject,'BackgroundColor','white');
+end
+
+% --- Executes on selection change in mpadmenu.
+function mpadmenu_Callback(hObject, eventdata, handles)
+
+global allpar
+allpar.mpad=get(handles.mpadmenu,'Value');
+switch allpar.mpad %choose mPAD. All values refer to Chris Chen's mPADs
+    case 1 % #2
+        allpar.mpadD=1.83;
+        allpar.mpadL=2.3;
+    case 2 % #3 (hard)
+        allpar.mpadD=1.83;
+        allpar.mpadL=5;
+    case 3 % #5
+        allpar.mpadD=1.83;
+        allpar.mpadL=6.1;
+    case 4 % #7 (medium)
+        allpar.mpadD=1.83;
+        allpar.mpadL=7.1;
+    case 5 % #9
+        allpar.mpadD=1.83;
+        allpar.mpadL=8.3;
+    case 6 % #11 (soft)
+        allpar.mpadD=1.83;
+        allpar.mpadL=10.3;
+    case 7 % #12
+        allpar.mpadD=1.83;
+        allpar.mpadL=12.9;
+end
+
+%%
+% --- Executes on button press in parexperiment.
+function parexperiment_Callback(hObject, eventdata, handles)
+% hObject    handle to parexperiment (see GCBO)
 % eventdata  reserved - to be defined in a future version of MATLAB
 % handles    structure with handles and user data (see GUIDATA)
 global allpar
 %display(allpar.process)
+
+switch allpar.experiment
+    case 1 % mPAD parameters
+        textvar={'post D [um]',...
+            'post L [um]',...
+            'array pitch (center-to-center distance) [µm]',...
+            'Youngs modulus of PDMS [MPa]',...
+            'Poisson number [0...0.5]'};
+        defans={num2str(allpar.mpadD),...
+            num2str(allpar.mpadL),...
+            num2str(allpar.mpadP),...
+            num2str(allpar.mpadE),...
+            num2str(allpar.mpadNu)};
+        answer=inputdlg(textvar,'mPAD parameters',1,defans);
+        allpar.mpadD=str2double(answer(1));
+        allpar.mpadL=str2double(answer(2));
+        allpar.mpadP=str2double(answer(3));
+        allpar.mpadE=str2double(answer(4));
+        allpar.mpadNu=str2double(answer(5));
+        
+    case 2 % image specifications
+        textvar={'pixel size [um]'};
+        defans={num2str(allpar.pixelsize)};
+        answer=inputdlg(textvar,'image specifications',1,defans);
+        allpar.pixelsize=str2double(answer(1));
+        
+end
+
+%%
+% --- Executes on button press in parprocess.
+function parprocess_Callback(hObject, eventdata, handles)
+
+global allpar
 
 switch allpar.process
     case 1 %find centers
@@ -1292,15 +971,29 @@ switch allpar.process
         answer=inputdlg(textvar,'Parameters for refining post positions by fitting',1,defans);
         allpar.r1=str2double(answer(1));
         allpar.r2=str2double(answer(2));
-    case 5 %refine positions by correlation between ROIs
-        textvar={'upscaling factor [10...100]',...
-            'images to use [0=selected, 1=top-bottom]'};
-        defans={num2str(allpar.rbc1),num2str(allpar.rbc2)};
-        answer=inputdlg(textvar,'Parameters for refining post positions by correlation',1,defans);
-        allpar.rbc1=str2double(answer(1));
-        allpar.rbc2=str2double(answer(2));
+%     case 5 %refine positions by correlation between ROIs
+%         textvar={'upscaling factor [10...100]',...
+%             'images to use [0=selected, 1=top-bottom]'};
+%         defans={num2str(allpar.rbc1),num2str(allpar.rbc2)};
+%         answer=inputdlg(textvar,'Parameters for refining post positions by correlation',1,defans);
+%         allpar.rbc1=str2double(answer(1));
+%         allpar.rbc2=str2double(answer(2));
+
+    case 5 %define cell regions
+        textvar={'method [0= freehand, 1= automatic]',...
+            'threshold',...
+            'minimum object size [pixel]',...
+            'radius for closing [pixel]'};
+        defans={num2str(allpar.outline1),num2str(allpar.outline2),...
+            num2str(allpar.outline3),num2str(allpar.outline4)};
+        answer=inputdlg(textvar,'Parameters for determining cell outlines',1,defans);
+        allpar.outline1=str2double(answer(1));
+        allpar.outline2=str2double(answer(2));
+        allpar.outline3=str2double(answer(3));
+        allpar.outline4=str2double(answer(4));
+        
     case 6 %remove drift from stack
-        textvar={'method [0= mean, 1= spline]',...
+        textvar={'method [0= no mask, 1= cell outlines]',...
             'fraction of posts for refinement [0...1]',...
             'color range max [0.5...2]'};
         defans={num2str(allpar.dc1),num2str(allpar.dc2),num2str(allpar.dc3)};
@@ -1309,16 +1002,38 @@ switch allpar.process
         allpar.dc2=str2double(answer(2));
         allpar.dc3=str2double(answer(3));
     case 7 %calculate forces
-        textvar={'pixel size [um]','post D [um]',...
-            'post L [um]','Youngs modulus of PDMS [MPa]',...
-            'method [0= spline, 1= exact fit, 2= top-bottom'};
-        defans={num2str(allpar.force1),num2str(allpar.force2),...
-            num2str(allpar.force3),num2str(allpar.force4),...
-            num2str(allpar.force5)};
+        textvar={
+            'method [0= spline, 1= exact fit, 2= top-bottom',...
+            'smoothness of spline [0...1]',...
+            'scaling factor for length of force arrows',...
+            'scale bar [nN]',...
+            };
+        defans={num2str(allpar.force1),...
+            num2str(allpar.force2),...
+            num2str(allpar.force3),...
+            num2str(allpar.force4)...
+            };
         answer=inputdlg(textvar,'Parameters for calculation of forces',1,defans);
         allpar.force1=str2double(answer(1));
         allpar.force2=str2double(answer(2));
         allpar.force3=str2double(answer(3));
         allpar.force4=str2double(answer(4));
-        allpar.force5=str2double(answer(5));
+    case 8 %statistics for cells
+        textvar={
+            'par1',...
+            'par2',...
+            'scaling factor for length of force arrows',...
+            'scale bar [nN]',...
+            };
+        defans={num2str(allpar.stat1),...
+            num2str(allpar.stat2),...
+            num2str(allpar.force3),...
+            num2str(allpar.force4)...
+            };
+        answer=inputdlg(textvar,'Parameters for cell statistics',1,defans);
+        allpar.stat1=str2double(answer(1));
+        allpar.stat2=str2double(answer(2));
+        allpar.force3=str2double(answer(3));
+        allpar.force4=str2double(answer(4));
+       
 end

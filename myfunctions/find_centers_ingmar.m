@@ -30,7 +30,7 @@ bw1=adaptivethreshold(processedimg,round(pitch),0);
 bw1=imclearborder(bw1);
 
 % disconnect artifacts
-se1=strel('disk',floor(pitch/4.)-corrstrel);
+se1=strel('disk',max([floor(pitch/4.)-corrstrel,1]));
 bw2=imopen(bw1,se1);
 
 % remove noise, shrink to central points
@@ -45,3 +45,16 @@ end
 
 % get coordinates
 [y x ~]=find(bw4);
+
+% % throw out objects which are too close to boundary
+% md = floor(pitch/2)+1;
+% is = size(img);
+% x = x(y>md);
+% y = y(y>md);
+% y = y(x>md);
+% x = x(x>md);
+% x = x(y<is(1)-md);
+% y = y(y<is(1)-md);
+% y = y(x<is(2)-md);
+% x = x(x<is(2)-md);
+    

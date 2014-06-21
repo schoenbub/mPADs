@@ -7,7 +7,7 @@ function obj_refined=refine_by_fit(img,objs,roisize,method)
 % ;         img: image
 % ;         obj: initial objects
 % ;         roisize: size of region of interest
-% ;         method: 0= COM, 1= radial symmetric gradient by RP
+% ;         method: 0= radial symmetric gradient by RP, 1= COM
 % ; 
 % ; copyright by Ingmar Schoen, ETH Zurich, ingmar.schoen@hest.ethz.ch
 
@@ -22,7 +22,7 @@ rect = zeros(length(x), 4);
 % the rest.  A bit inelegant; could calculate all rect's at once...
 % Skip if there are no objects to find
 if ~isempty(x)
-    rect(1,:) = [(round(x(1)) - floor(roisize/2)) (round(y(1)) - length(roisize/2)) (roisize-1) (roisize-1)];
+    rect(1,:) = [(round(x(1)) - floor(roisize/2)) (round(y(1)) - floor(roisize/2)) (roisize-1) (roisize-1)];
     cropimg1 = img(rect(1,2):(rect(1,2)+roisize-1), rect(1,1):(rect(1,1)+roisize-1));
     % all the other neighborhoods
     cropimg = repmat(cropimg1, [1 1 length(x)]); % to allocate memory
@@ -41,6 +41,9 @@ meanbkg = zeros(1, length(x));
 savemass = zeros(1, length(x));
 for k = 1:length(x)
     tempreg = cropimg(:,:,k);
+    if ~(size(nhood)==size(tempreg))
+        display(['incompatible size: ' num2str(size(nhood)) ' versus ' num2str(size(tempreg))])
+    end
     cropreg = tempreg(nhood);
     bkgreg  = tempreg(~nhood);
     meanbkg(k) = mean(bkgreg(:));
