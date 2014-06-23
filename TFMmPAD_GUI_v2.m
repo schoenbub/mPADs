@@ -71,7 +71,8 @@ entries={...
     'define cell outlines',...
     'remove systematic drift from stack',...
     'calculate forces and directions',...
-    'output cell statistics'...
+    'output cell statistics',...
+    'load variables from previous results'...
     };
 set(handles.processmenu,'String',entries);
 processmenu_Callback(hObject,-1,handles);
@@ -735,6 +736,27 @@ switch allpar.process
             angposts, forceposts, xyposts, cellstats, labelposts, ...
             cellnetang, cellnetforce, colnames, dataall);
         
+    case 9 % load variables from previous results
+        
+        % check if file exists
+        p = get(hglob.directory,'String');
+        pout = [p '\results'];
+        fnbase = dat.allfiles(dat.current).name;
+        fnbase = fnbase(1:end-4);
+        fnout = [pout '\' fnbase '_variables.mat'];
+        if exist(fnout, 'file') == 2
+            load(fnout,'allpar','dat2save');
+            fieldnms = fieldnames(dat2save);
+            for i=1:length(fieldnms)
+                dat.(fieldnms{i}) = dat2save.(fieldnms{i});
+            end
+            clear dat2sav;
+            display('finished loading');
+        else
+            display('file does not exist');
+        end
+        
+            
 end
 
 %%
@@ -938,5 +960,9 @@ switch allpar.process
         allpar.stat2=str2double(answer(2));
         allpar.force3=str2double(answer(3));
         allpar.force4=str2double(answer(4));
+    
+    case 9 % load previous results
+        % no dialog, no options
+                
        
 end

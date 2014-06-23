@@ -139,5 +139,5 @@ if allpar.stat1 == 1
     dat2save = rmfield(dat2save,'raw');
 %     avoidVariable = 'dat';
 %     save(fnout,'-regexp', ['^(?!', avoidVariable,'$).']);
-    save(fnout,'allpar','dat2save','hglob')
+    save(fnout,'allpar','dat2save')
 end
