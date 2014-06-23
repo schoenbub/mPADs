@@ -36,4 +36,9 @@ imshow(bw4);
 L = bwlabel(bw4,4);
 rgb = label2rgb(L,'jet','k');
 figure(2)
-imshow(rgb);               
+imshow(im, []);
+colormap gray
+hold on
+hg = imshow(rgb);
+hold off
+set(hg,'AlphaData',0.15)

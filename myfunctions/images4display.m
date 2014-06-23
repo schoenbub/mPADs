@@ -26,4 +26,4 @@ im_actin = 2 * (im_actin - min(im_actin(:)))/...
     (max(im_actin(:)) - min(im_actin(:)));
 im_actin(im_actin>1)=1;
 % outline of cells
-B = bwboundaries(L,8,'noholes');
+B = bwboundaries(L,4,'noholes');

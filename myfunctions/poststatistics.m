@@ -1,5 +1,5 @@
 function [xyposts, IDposts, angposts, forceposts, labelposts, cellavgforce,...
-    cellmaxforce, cellnetforce, cellnetang, f0median, kspring] =...
+    cellmaxforce, celltotalforce, cellnetforce, cellnetang, f0median, kspring] =...
     poststatistics(L)
 
 % ; statistics of post forces
@@ -33,6 +33,7 @@ end
 % force statistics over individual cells
 cellavgforce = zeros([1 max(L(:))]);
 cellmaxforce = cellavgforce;
+celltotalforce = cellavgforce;
 cellnetforce = cellavgforce;
 cellnetang = cellavgforce;
 for i=1:max(L(:))
@@ -41,6 +42,8 @@ for i=1:max(L(:))
     fi = fi(~isnan(fi));
     % average force
     cellavgforce(i) = mean(fi);
+    % total force
+    celltotalforce(i) = sum(fi);
     % maximum force
     cellmaxforce(i) = max(fi);
     % angles of forces
